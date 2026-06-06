@@ -30,6 +30,14 @@ adminRoutes.get('/users/:userId/grants', c.listUserGrants);
 adminRoutes.post('/users/:userId/grants', c.createUserGrant);
 adminRoutes.delete('/user-grants/:id', c.deleteUserGrant);
 
+// Pages
+adminRoutes.get('/pages', c.listPages);
+adminRoutes.post('/pages', c.createPage);
+adminRoutes.patch('/pages/:id', c.updatePage);
+adminRoutes.delete('/pages/:id', c.deletePage);
+adminRoutes.get('/roles/:roleId/pages', c.listRolePages);
+adminRoutes.put('/roles/:roleId/pages/:pageId', c.setRolePage);
+
 // Catalog
 adminRoutes.get('/resource-types', c.listResourceTypes);
 adminRoutes.post('/resource-types', c.createResourceType);
