@@ -1,5 +1,5 @@
 import { sequelize } from './sequelize.js';
-import { models } from './models.js';
+import { models } from '../models/index.js';
 import { installTenantHooks } from './tenant-hooks.js';
 
 // Global hooks enforce tenant isolation by reading the AsyncLocalStorage context.
