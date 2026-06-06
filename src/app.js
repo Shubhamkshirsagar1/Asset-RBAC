@@ -1,6 +1,7 @@
 import express from 'express';
 import { authRoutes } from './routes/auth.routes.js';
 import { meRoutes } from './routes/me.routes.js';
+import { adminRoutes } from './routes/admin.routes.js';
 import { errorHandler } from './middleware/error.js';
 
 export function createApp() {
@@ -11,6 +12,7 @@ export function createApp() {
 
   app.use('/auth', authRoutes);
   app.use('/me', meRoutes);
+  app.use('/admin', adminRoutes);
 
   app.use(errorHandler);
   return app;
