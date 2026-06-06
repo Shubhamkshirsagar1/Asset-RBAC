@@ -1,7 +1,7 @@
 import { models } from '../src/db/index.js';
 
 const {
-  Tenant, OrgUnit, Role, User, UserRole, UserOrgUnit, Grant, UserGrant,
+  Tenant, OrgUnit, Role, User, UserRole, UserOrgUnit, Grant, UserGrant, Page, RolePageAccess,
 } = models;
 
 let counter = 0;
@@ -50,6 +50,23 @@ export function makeUserGrant(userId, o) {
   });
 }
 
+export function makePage(tenantId, o = {}) {
+  return Page.create({
+    tenantId,
+    key: o.key ?? uid('page'),
+    label: o.label ?? 'Page',
+    path: o.path ?? '/p',
+    order: o.order ?? 0,
+    parentId: o.parentId ?? null,
+    requiredPermissions: o.requiredPermissions ?? [],
+    inheritFromParent: o.inheritFromParent ?? true,
+    isMenuItem: o.isMenuItem ?? true,
+  });
+}
+
+export const setPageAccess = (roleId, pageId, enabled) =>
+  RolePageAccess.create({ roleId, pageId, enabled });
+
 // FK constraints are ON DELETE CASCADE from Tenant down, so removing the tenant
-// removes users, roles, org units, grants, audit logs, etc.
+// removes users, roles, org units, grants, pages, audit logs, etc.
 export const cleanupTenant = (tenantId) => Tenant.destroy({ where: { id: tenantId } });
