@@ -1,0 +1,90 @@
+// Reference schema for moving this project onto a real database.
+// The in-memory store in src/db/store.js mirrors these models exactly, so the
+// migration is: (1) run `prisma migrate dev`, (2) replace the helper functions
+// in store.js with prisma queries, (3) port the seed data into prisma/seed.js.
+//
+// NOTE: `requiredPermissions String[]` requires PostgreSQL/CockroachDB/MongoDB.
+// On SQLite, store it as a JSON string and parse in code instead.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id         String     @id @default(cuid())
+  email      String     @unique
+  password   String
+  attributes Json       @default("{}")
+  roles      UserRole[]
+}
+
+model Role {
+  id           String           @id @default(cuid())
+  name         String           @unique
+  parentRoleId String?
+  parent       Role?            @relation("RoleHierarchy", fields: [parentRoleId], references: [id])
+  children     Role[]           @relation("RoleHierarchy")
+  isSystem     Boolean          @default(false)
+  permissions  RolePermission[]
+  users        UserRole[]
+  pageAccess   RolePageAccess[]
+}
+
+model Permission {
+  id       String           @id @default(cuid())
+  resource String
+  action   String
+  scope    String           @default("any")
+  roles    RolePermission[]
+
+  @@unique([resource, action, scope])
+}
+
+model UserRole {
+  userId String
+  roleId String
+  user   User @relation(fields: [userId], references: [id])
+  role   Role @relation(fields: [roleId], references: [id])
+
+  @@id([userId, roleId])
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+  role         Role       @relation(fields: [roleId], references: [id])
+  permission   Permission @relation(fields: [permissionId], references: [id])
+
+  @@id([roleId, permissionId])
+}
+
+model Page {
+  id                  String           @id @default(cuid())
+  key                 String           @unique
+  label               String
+  path                String
+  icon                String?
+  order               Int              @default(0)
+  parentId            String?
+  parent              Page?            @relation("PageTree", fields: [parentId], references: [id])
+  children            Page[]           @relation("PageTree")
+  requiredPermissions String[]
+  inheritFromParent   Boolean          @default(true)
+  isMenuItem          Boolean          @default(true)
+  access              RolePageAccess[]
+}
+
+model RolePageAccess {
+  roleId  String
+  pageId  String
+  enabled Boolean @default(true)
+  role    Role    @relation(fields: [roleId], references: [id])
+  page    Page    @relation(fields: [pageId], references: [id])
+
+  @@id([roleId, pageId])
+}

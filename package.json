@@ -1,0 +1,21 @@
+{
+  "name": "nodejs-rbac",
+  "version": "1.0.0",
+  "description": "Production-style RBAC for Node.js/Express: role hierarchy, wildcard+scope permissions, ownership (ABAC) checks, nested page tree with dynamic per-role enable/disable, and a server-filtered navigation menu.",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "test": "node test/smoke.test.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "express": "^4.19.2",
+    "jsonwebtoken": "^9.0.2"
+  },
+  "license": "MIT"
+}
