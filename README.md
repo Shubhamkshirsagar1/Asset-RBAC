@@ -1,130 +1,108 @@
-# Node.js RBAC
+# Dynamic Multi-Tenant RBAC + ABAC Platform
 
-A production-style role-based access control system for Node.js / Express, runnable with **zero external setup** (data lives in an in-memory store seeded with demo data). It demonstrates the full set of RBAC features:
+A professional, **domain-agnostic** authorization backend for Node.js/Express, backed by
+**PostgreSQL** (Sequelize + Umzug migrations). It implements the full spectrum of access control —
+**role hierarchy, scoped permissions, attribute-based (ABAC) conditions, multi-tenancy, approval
+workflows / segregation of duties, time-bound and user-level grants, and break-glass** — all
+configurable by admins **at runtime** with no redeploy. The engine knows nothing about any specific
+domain; two example tenants (a **hospital asset-management** system and a **project-management**
+SaaS) run on the *same* engine as proof.
 
-- **Role hierarchy / inheritance** — a role inherits all permissions of its parent (`admin` → `manager` → `user`).
-- **Wildcard + scoped permissions** — `resource:action:scope`, e.g. `invoices:read:any`, `invoices:update:own`, `*:*:*` for superadmin.
-- **Scope fallthrough** — a broader `any` grant satisfies a narrower `own` requirement, never the reverse.
-- **Ownership / ABAC conditions** — `own`-scoped permissions verify `resource.ownerId === user.id`; extend with department/region via `registerScope()`.
-- **Nested page tree** — pages have parents; access to a child can require access to every ancestor.
-- **Dynamic per-role page enable/disable** — flip a page on/off for a role at runtime, overriding permissions, without a redeploy.
-- **Server-filtered navigation menu** — `/me/menu` returns only the pages the user can reach; the frontend renders it verbatim.
-- **Permission caching with invalidation** — effective permissions are cached per user and busted on every admin write.
+> Architecture, decisions, and the phased build are documented under
+> `docs/superpowers/specs/` and `docs/superpowers/plans/`.
+
+## Architecture
+
+- **Layering:** `routes` → `controllers` → `services` → `engine`. Routes declare endpoints + guards;
+  controllers are thin; services hold logic; the **engine is pure** (no DB/Express) and fully
+  unit-tested.
+- **Authorization model:** RBAC + a **data-driven ABAC engine**. Each grant may carry a JSON
+  `condition` evaluated at request time against `{ subject, resource, environment }`. Deny overrides
+  allow; scopes fall through (`any > tenant > facility > dept > own`).
+- **Multi-tenancy:** shared DB, shared schema, **row-level isolation**. An `AsyncLocalStorage`
+  tenant context + per-model Sequelize hooks auto-inject `where: { tenantId }` and stamp `tenantId`
+  on writes, so isolation lives in one place.
+
+```
+src/
+  engine/        pure RBAC+ABAC evaluator (operators, conditions, scope, can)
+  db/            sequelize instance, models, tenant-scoping hooks, migrate runner
+  services/      auth, rbac (roles+grants+cache), org, subject, authorize, domain, admin
+  middleware/    auth (JWT), tenant-context, authorize (requirePermission/requireOwnership), error
+  controllers/   thin req/res handlers
+  routes/        auth, me, admin, assets, work-orders, projects, tasks
+  seed.js        two fully-fleshed demo tenants
+migrations/      Umzug migration(s)
+test/            engine unit tests + end-to-end API + scenario suites
+```
 
 ## Run it
 
 ```bash
+docker compose up -d      # local Postgres on :5433
 npm install
-npm start        # http://localhost:3000
-npm test         # 19 end-to-end checks
+npm run db:migrate        # apply schema
+npm run seed              # two demo tenants
+npm start                 # http://localhost:3000
+npm test                  # full suite
 ```
 
 ## Demo accounts
 
-All passwords are `password`.
+All passwords are `password`. Log in with the tenant **slug** + email.
 
-| Email | Role | Notable grants |
-|-------|------|----------------|
-| `root@example.com`  | superadmin | `*:*:*` |
-| `alice@example.com` | admin | rbac:manage, users:read + everything manager/user has |
-| `bob@example.com`   | manager | invoices:read/approve:any + user's own grants |
-| `carol@example.com` | user | invoices read/create/update **own** only |
+**Hospital tenant — slug `mercy`:**
+
+| Email | Role | Notable |
+|-------|------|---------|
+| `root@mercy.test`  | superadmin | `*:*:*` |
+| `alice@mercy.test` | admin | `rbac:manage` + reads |
+| `bob@mercy.test`   | manager | approve work orders **under 5k** and **only if not the requester**; Approvals *page* hidden by toggle |
+| `carol@mercy.test` | technician | dept-scoped asset reads, own updates, create work orders |
+| `dan@mercy.test`   | auditor | read-only |
+
+**Project-management tenant — slug `acme`:**
+
+| Email | Role | Notable |
+|-------|------|---------|
+| `dave@acme.test`  | pmadmin | `rbac:manage` |
+| `erin@acme.test`  | lead | read any project/task |
+| `frank@acme.test` | member | own projects/tasks; **cannot edit a `done` task** |
 
 ## Try it with curl
 
 ```bash
-# 1. Log in
-TOKEN=$(curl -s -X POST localhost:3000/auth/login \
+# Log in (note tenantSlug)
+TOKEN=$(curl -s -X POST localhost:3000/auth/login -H 'content-type: application/json' \
+  -d '{"tenantSlug":"mercy","email":"bob@mercy.test","password":"password"}' | jq -r .access_token)
+
+curl -s localhost:3000/me/permissions -H "authorization: Bearer $TOKEN"   # effective grants
+curl -s localhost:3000/me/menu        -H "authorization: Bearer $TOKEN"   # server-filtered nav
+curl -s localhost:3000/assets         -H "authorization: Bearer $TOKEN"   # scope-filtered list
+
+# Admin (needs rbac:manage) — explain a decision (the teaching endpoint)
+ADMIN=$(curl -s -X POST localhost:3000/auth/login -H 'content-type: application/json' \
+  -d '{"tenantSlug":"mercy","email":"alice@mercy.test","password":"password"}' | jq -r .access_token)
+curl -s -X POST localhost:3000/admin/explain -H "authorization: Bearer $ADMIN" \
   -H 'content-type: application/json' \
-  -d '{"email":"alice@example.com","password":"password"}' | jq -r .access_token)
-
-# 2. See your effective permissions (hierarchy already flattened)
-curl -s localhost:3000/me/permissions -H "authorization: Bearer $TOKEN"
-
-# 3. See your filtered navigation menu (nested, pruned)
-curl -s localhost:3000/me/menu -H "authorization: Bearer $TOKEN"
-
-# 4. Dynamically toggle a page for a role
-curl -s -X PUT localhost:3000/admin/roles/r_manager/pages/pg_inv_approve \
-  -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' \
-  -d '{"enabled":true}'
-
-# 5. Grant a permission to a role at runtime
-curl -s -X POST localhost:3000/admin/roles/r_user/permissions \
-  -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' \
-  -d '{"resource":"reports","action":"read","scope":"any"}'
+  -d '{"userId":"<id>","action":"approve","resourceType":"work_order","resource":{"requestedById":"<id>","cost":9000}}'
 ```
 
-## The demo that proves the design
+## The demos that prove the design
 
-The `manager` role **has** `invoices:approve:any`, but the seed disables the
-Approvals page for managers (`rolePageAccess`). So a manager's `/me/menu` hides
-Approvals even though they hold the permission — a page toggle overrides a grant
-at runtime. Flip it back on with the toggle endpoint and it reappears
-immediately (the permission cache is invalidated on write).
+- **Toggle overrides permission:** `bob` (manager) *holds* `work_order:approve`, but the **Approvals
+  page** is disabled for the manager role, so `/me/menu` hides it. Flip it back on
+  (`PUT /admin/roles/:roleId/pages/:pageId {"enabled":true}`) and it reappears immediately.
+- **Segregation of duties + cost threshold:** a manager can approve a work order only when they
+  aren't the requester *and* the cost is ≤ 5000 — both encoded as a single JSON condition on the
+  grant, no code.
+- **Genericity:** projects/tasks use the exact same engine, guards, and scope machinery as
+  assets/work-orders.
+- **Tenant isolation:** the `mercy` and `acme` tenants share one database and never see each other's
+  rows.
 
-## API surface
+## API surface (high level)
 
-| Method & path | Guard | Purpose |
-|---------------|-------|---------|
-| `POST /auth/login` | — | issue JWT |
-| `GET /me` | auth | current user + roles |
-| `GET /me/permissions` | auth | flattened effective permissions |
-| `GET /me/menu` | auth | server-filtered nav tree |
-| `GET /invoices` | `invoices:read:own` (capability) | own/all per scope |
-| `GET /invoices/:id` | ownership | read one |
-| `PATCH /invoices/:id` | ownership | update one |
-| `POST /invoices/:id/approve` | `invoices:approve:any` | approve |
-| `GET /admin/pages` | `rbac:manage:any` | inspect tree + toggles |
-| `PUT /admin/roles/:r/pages/:p` | `rbac:manage:any` | enable/disable page |
-| `POST /admin/roles/:r/permissions` | `rbac:manage:any` | grant permission |
-| `DELETE /admin/roles/:r/permissions` | `rbac:manage:any` | revoke permission |
-
-## Project layout
-
-```
-src/
-  lib/permission-match.js          wildcard + scope matching
-  db/store.js                      in-memory store + seed (mirrors Prisma)
-  services/
-    permission.service.js          effective perms via hierarchy + cache
-    authorize.service.js           can() engine + scope/ownership checkers
-    page-access.service.js         nested pages + dynamic enable/disable
-    menu.service.js                build the filtered nav tree
-  middleware/
-    auth.js                        JWT -> req.user
-    authorize.js                   requirePermission / requireOwnership
-    require-page.js                guard a route by page key
-    error.js                       central error handler
-  routes/                          auth, me, invoices, admin
-  app.js / index.js                wiring + entry
-prisma/schema.prisma               reference schema for a real database
-test/smoke.test.js                 19 end-to-end checks
-```
-
-## Moving to a real database
-
-The in-memory store in `src/db/store.js` mirrors `prisma/schema.prisma`
-one-to-one. To go to Postgres:
-
-1. `npm i @prisma/client && npm i -D prisma`
-2. Set `DATABASE_URL`, run `npx prisma migrate dev`.
-3. Replace the helper functions in `store.js` with Prisma queries (the service
-   layer never touches the store internals, so nothing else changes).
-4. Swap the in-memory permission cache for Redis if you run multiple instances —
-   the per-process `Map` in `permission.service.js` won't invalidate across them.
-
-> Note: `requiredPermissions String[]` needs PostgreSQL/CockroachDB/MongoDB. On
-> SQLite, store it as a JSON string and parse it in code.
-
-## Capability gate vs ownership enforcement
-
-Two distinct guards, by design:
-
-- `requirePermission('invoices:read:own')` is a **capability gate** — passes if
-  the user may act on their own records *at all*, then the handler filters rows.
-- `requireOwnership('invoices:update:own', loader)` loads the specific resource
-  and enforces ownership on it. A user with the `:any` grant passes regardless
-  of owner; an `:own`-only user passes only on their own record.
-
-Use the first for lists, the second for single-record reads/mutations.
+`POST /auth/login` · `GET /me` · `GET /me/permissions` · `GET /me/menu` ·
+`/assets` + `/work-orders` (hospital) · `/projects` + `/tasks` (pm) ·
+`/admin/{roles,grants,users/:id/roles,user-grants,resource-types,actions,pages,explain}`.
