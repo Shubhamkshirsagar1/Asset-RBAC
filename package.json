@@ -1,21 +1,30 @@
 {
   "name": "nodejs-rbac",
-  "version": "1.0.0",
-  "description": "Production-style RBAC for Node.js/Express: role hierarchy, wildcard+scope permissions, ownership (ABAC) checks, nested page tree with dynamic per-role enable/disable, and a server-filtered navigation menu.",
+  "version": "2.0.0",
+  "description": "Dynamic multi-tenant RBAC+ABAC platform (Postgres, routes->controllers->services).",
   "type": "module",
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
-    "test": "node test/smoke.test.js"
+    "db:up": "docker compose up -d",
+    "db:down": "docker compose down",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev",
+    "seed": "node prisma/seed.js",
+    "test": "node --test"
   },
-  "engines": {
-    "node": ">=18"
-  },
+  "engines": { "node": ">=18" },
+  "prisma": { "seed": "node prisma/seed.js" },
   "dependencies": {
+    "@prisma/client": "^5.18.0",
     "bcryptjs": "^2.4.3",
+    "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "jsonwebtoken": "^9.0.2"
+  },
+  "devDependencies": {
+    "prisma": "^5.18.0"
   },
   "license": "MIT"
 }
