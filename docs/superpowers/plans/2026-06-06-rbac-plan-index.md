@@ -14,7 +14,7 @@ prior phase is implemented and verified, so they reflect the real code.
 | 3b. Admin APIs | `2026-06-06-phase-3b-admin.md` | roles, grants, user-roles, user-grants, resource types/actions, `/admin/explain`, cache invalidation on writes |
 | 3c. Pages & menu | `2026-06-06-phase-3c-pages.md` | pages CRUD, per-role page toggles, filtered `/me/menu` |
 | 4. Hospital domain | `2026-06-06-phase-4-hospital.md` | assets, work-orders, workflows + e2e |
-| 5. PM domain | `phase-5-pm.md` (TBW) | projects, tasks (proves genericity) |
+| 5. PM domain | `2026-06-06-phase-5-pm.md` | projects, tasks (proves genericity) |
 | 6. React app | `phase-6-web.md` (TBW) | login, dynamic nav, domain screens, admin console, explainer |
 | 7. Seed + scenario tests | `phase-7-scenarios.md` (TBW) | demonstrate every scenario in spec §10 |
 
