@@ -1,7 +1,6 @@
 import express from 'express';
 import { authRoutes } from './routes/auth.routes.js';
-import { authenticate } from './middleware/auth.js';
-import { tenantContext } from './middleware/tenant-context.js';
+import { meRoutes } from './routes/me.routes.js';
 import { errorHandler } from './middleware/error.js';
 
 export function createApp() {
@@ -11,11 +10,7 @@ export function createApp() {
   app.get('/health', (req, res) => res.json({ ok: true }));
 
   app.use('/auth', authRoutes);
-
-  // Protected probe: confirms auth + tenant context wiring end to end.
-  app.get('/me/context', authenticate, tenantContext, (req, res) => {
-    res.json({ userId: req.user.userId, tenantId: req.user.tenantId });
-  });
+  app.use('/me', meRoutes);
 
   app.use(errorHandler);
   return app;
