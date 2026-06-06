@@ -16,6 +16,7 @@ before(async () => {
 after(async () => {
   await User.destroy({ where: { tenantId: [tA.id, tB.id] } });
   await Tenant.destroy({ where: { id: [tA.id, tB.id] } });
+  await sequelize.close();
 });
 
 test('tenant-scoped findAll only returns the current tenant rows', async () => {
