@@ -15,7 +15,7 @@ prior phase is implemented and verified, so they reflect the real code.
 | 3c. Pages & menu | `2026-06-06-phase-3c-pages.md` | pages CRUD, per-role page toggles, filtered `/me/menu` |
 | 4. Hospital domain | `2026-06-06-phase-4-hospital.md` | assets, work-orders, workflows + e2e |
 | 5. PM domain | `2026-06-06-phase-5-pm.md` | projects, tasks (proves genericity) |
-| 6. React app | `phase-6-web.md` (TBW) | login, dynamic nav, domain screens, admin console, explainer |
+| 6. React app | `2026-06-06-phase-6-web.md` | login, dynamic nav, domain screens, admin console, explainer |
 | 7. Seed + scenario tests | `2026-06-06-phase-7-scenarios.md` | demonstrate every scenario in spec §10 |
 
 TBW = to be written when its phase begins.
