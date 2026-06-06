@@ -1,11 +1,3 @@
-// Reference schema for moving this project onto a real database.
-// The in-memory store in src/db/store.js mirrors these models exactly, so the
-// migration is: (1) run `prisma migrate dev`, (2) replace the helper functions
-// in store.js with prisma queries, (3) port the seed data into prisma/seed.js.
-//
-// NOTE: `requiredPermissions String[]` requires PostgreSQL/CockroachDB/MongoDB.
-// On SQLite, store it as a JSON string and parse in code instead.
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -15,34 +7,99 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum TenantType {
+  hospital
+  pm
+}
+
+enum Effect {
+  allow
+  deny
+}
+
+enum Scope {
+  own
+  dept
+  facility
+  tenant
+  any
+}
+
+enum Decision {
+  allow
+  deny
+}
+
+model Tenant {
+  id            String         @id @default(cuid())
+  slug          String         @unique
+  name          String
+  type          TenantType
+  createdAt     DateTime       @default(now())
+  users         User[]
+  orgUnits      OrgUnit[]
+  roles         Role[]
+  resourceTypes ResourceType[]
+  pages         Page[]
+  auditLogs     AuditLog[]
+  assets        Asset[]
+  workOrders    WorkOrder[]
+  vendors       Vendor[]
+  contracts     Contract[]
+  projects      Project[]
+  tasks         Task[]
+}
+
 model User {
-  id         String     @id @default(cuid())
-  email      String     @unique
-  password   String
-  attributes Json       @default("{}")
-  roles      UserRole[]
+  id           String        @id @default(cuid())
+  tenantId     String
+  email        String
+  password     String
+  attributes   Json          @default("{}")
+  createdAt    DateTime      @default(now())
+  tenant       Tenant        @relation(fields: [tenantId], references: [id])
+  userRoles    UserRole[]
+  userOrgUnits UserOrgUnit[]
+  userGrants   UserGrant[]
+
+  @@unique([tenantId, email])
+}
+
+model OrgUnit {
+  id       String        @id @default(cuid())
+  tenantId String
+  parentId String?
+  type     String
+  name     String
+  tenant   Tenant        @relation(fields: [tenantId], references: [id])
+  parent   OrgUnit?      @relation("OrgTree", fields: [parentId], references: [id])
+  children OrgUnit[]     @relation("OrgTree")
+  members  UserOrgUnit[]
+}
+
+model UserOrgUnit {
+  userId    String
+  orgUnitId String
+  user      User    @relation(fields: [userId], references: [id])
+  orgUnit   OrgUnit @relation(fields: [orgUnitId], references: [id])
+
+  @@id([userId, orgUnitId])
 }
 
 model Role {
   id           String           @id @default(cuid())
-  name         String           @unique
+  tenantId     String
+  name         String
   parentRoleId String?
+  isSystem     Boolean          @default(false)
+  tenant       Tenant           @relation(fields: [tenantId], references: [id])
   parent       Role?            @relation("RoleHierarchy", fields: [parentRoleId], references: [id])
   children     Role[]           @relation("RoleHierarchy")
-  isSystem     Boolean          @default(false)
-  permissions  RolePermission[]
-  users        UserRole[]
+  grants       Grant[]
+  userRoles    UserRole[]
   pageAccess   RolePageAccess[]
-}
 
-model Permission {
-  id       String           @id @default(cuid())
-  resource String
-  action   String
-  scope    String           @default("any")
-  roles    RolePermission[]
-
-  @@unique([resource, action, scope])
+  @@unique([tenantId, name])
 }
 
 model UserRole {
@@ -54,29 +111,68 @@ model UserRole {
   @@id([userId, roleId])
 }
 
-model RolePermission {
-  roleId       String
-  permissionId String
-  role         Role       @relation(fields: [roleId], references: [id])
-  permission   Permission @relation(fields: [permissionId], references: [id])
+model ResourceType {
+  id       String @id @default(cuid())
+  tenantId String
+  key      String
+  label    String
+  tenant   Tenant @relation(fields: [tenantId], references: [id])
 
-  @@id([roleId, permissionId])
+  @@unique([tenantId, key])
+}
+
+model Action {
+  id    String @id @default(cuid())
+  key   String @unique
+  label String
+}
+
+model Grant {
+  id              String    @id @default(cuid())
+  roleId          String
+  resourceTypeKey String
+  actionKey       String
+  effect          Effect    @default(allow)
+  scope           Scope     @default(any)
+  condition       Json?
+  expiresAt       DateTime?
+  role            Role      @relation(fields: [roleId], references: [id])
+
+  @@index([roleId])
+}
+
+model UserGrant {
+  id              String    @id @default(cuid())
+  userId          String
+  resourceTypeKey String
+  actionKey       String
+  effect          Effect    @default(allow)
+  scope           Scope     @default(any)
+  condition       Json?
+  expiresAt       DateTime?
+  user            User      @relation(fields: [userId], references: [id])
+
+  @@index([userId])
 }
 
 model Page {
   id                  String           @id @default(cuid())
-  key                 String           @unique
+  tenantId            String
+  key                 String
   label               String
   path                String
   icon                String?
   order               Int              @default(0)
   parentId            String?
-  parent              Page?            @relation("PageTree", fields: [parentId], references: [id])
-  children            Page[]           @relation("PageTree")
   requiredPermissions String[]
   inheritFromParent   Boolean          @default(true)
   isMenuItem          Boolean          @default(true)
+  tenant              Tenant           @relation(fields: [tenantId], references: [id])
+  parent              Page?            @relation("PageTree", fields: [parentId], references: [id])
+  children            Page[]           @relation("PageTree")
   access              RolePageAccess[]
+
+  @@unique([tenantId, key])
 }
 
 model RolePageAccess {
@@ -87,4 +183,80 @@ model RolePageAccess {
   page    Page    @relation(fields: [pageId], references: [id])
 
   @@id([roleId, pageId])
+}
+
+model AuditLog {
+  id             String   @id @default(cuid())
+  tenantId       String
+  userId         String?
+  action         String
+  resourceType   String
+  resourceId     String?
+  decision       Decision
+  reason         String
+  matchedGrantId String?
+  ts             DateTime @default(now())
+  tenant         Tenant   @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId, ts])
+}
+
+model Asset {
+  id               String      @id @default(cuid())
+  tenantId         String
+  orgUnitId        String?
+  assignedToUserId String?
+  name             String
+  status           String      @default("active")
+  value            Int         @default(0)
+  tenant           Tenant      @relation(fields: [tenantId], references: [id])
+  workOrders       WorkOrder[]
+}
+
+model WorkOrder {
+  id               String @id @default(cuid())
+  tenantId         String
+  assetId          String
+  requestedById    String
+  assignedToUserId String?
+  status           String @default("requested")
+  cost             Int    @default(0)
+  tenant           Tenant @relation(fields: [tenantId], references: [id])
+  asset            Asset  @relation(fields: [assetId], references: [id])
+}
+
+model Vendor {
+  id       String @id @default(cuid())
+  tenantId String
+  name     String
+  tenant   Tenant @relation(fields: [tenantId], references: [id])
+}
+
+model Contract {
+  id       String @id @default(cuid())
+  tenantId String
+  vendorId String
+  title    String
+  tenant   Tenant @relation(fields: [tenantId], references: [id])
+}
+
+model Project {
+  id        String  @id @default(cuid())
+  tenantId  String
+  orgUnitId String?
+  ownerId   String
+  name      String
+  tenant    Tenant  @relation(fields: [tenantId], references: [id])
+  tasks     Task[]
+}
+
+model Task {
+  id         String  @id @default(cuid())
+  tenantId   String
+  projectId  String
+  assigneeId String?
+  title      String
+  status     String  @default("todo")
+  tenant     Tenant  @relation(fields: [tenantId], references: [id])
+  project    Project @relation(fields: [projectId], references: [id])
 }
