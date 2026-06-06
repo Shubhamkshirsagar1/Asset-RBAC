@@ -1,5 +1,8 @@
 export const SCOPE_RANK = { own: 1, dept: 2, facility: 3, tenant: 4, any: 5 };
 
+// Conventional fields that denote "this row is mine" across domains.
+const OWN_FIELDS = ['ownerId', 'assignedToUserId', 'assigneeId', 'requestedById'];
+
 // For a single known resource: does this scope grant reach in?
 // (Tenant isolation itself is enforced by the DB layer, so tenant/any always pass here.)
 export function scopeSatisfiesResource(scope, user, resource) {
@@ -8,7 +11,7 @@ export function scopeSatisfiesResource(scope, user, resource) {
     case 'tenant':
       return true;
     case 'own':
-      return resource?.ownerId === user.id || resource?.assignedToUserId === user.id;
+      return OWN_FIELDS.some((f) => resource?.[f] != null && resource[f] === user.id);
     case 'dept':
       return resource?.orgUnitId != null && (user.departmentIds || []).includes(resource.orgUnitId);
     case 'facility':

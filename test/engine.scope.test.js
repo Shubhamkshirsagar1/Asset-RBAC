@@ -16,9 +16,11 @@ test('any and tenant always satisfy on a resource', () => {
   assert.equal(scopeSatisfiesResource('tenant', user, { ownerId: 'x' }), true);
 });
 
-test('own checks ownerId or assignedToUserId', () => {
+test('own matches any conventional owner field (owner/assignee/requester)', () => {
   assert.equal(scopeSatisfiesResource('own', user, { ownerId: 'u1' }), true);
   assert.equal(scopeSatisfiesResource('own', user, { assignedToUserId: 'u1' }), true);
+  assert.equal(scopeSatisfiesResource('own', user, { assigneeId: 'u1' }), true);
+  assert.equal(scopeSatisfiesResource('own', user, { requestedById: 'u1' }), true);
   assert.equal(scopeSatisfiesResource('own', user, { ownerId: 'u9' }), false);
 });
 

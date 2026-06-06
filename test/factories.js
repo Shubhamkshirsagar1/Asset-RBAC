@@ -2,7 +2,7 @@ import { models } from '../src/db/index.js';
 
 const {
   Tenant, OrgUnit, Role, User, UserRole, UserOrgUnit, Grant, UserGrant, Page, RolePageAccess,
-  Asset, WorkOrder,
+  Asset, WorkOrder, Project, Task,
 } = models;
 
 let counter = 0;
@@ -87,6 +87,25 @@ export function makeWorkOrder(tenantId, o = {}) {
     assignedToUserId: o.assignedToUserId ?? null,
     cost: o.cost ?? 0,
     status: o.status ?? 'requested',
+  });
+}
+
+export function makeProject(tenantId, o = {}) {
+  return Project.create({
+    tenantId,
+    name: o.name ?? 'Project',
+    orgUnitId: o.orgUnitId ?? null,
+    ownerId: o.ownerId,
+  });
+}
+
+export function makeTask(tenantId, o = {}) {
+  return Task.create({
+    tenantId,
+    projectId: o.projectId,
+    title: o.title ?? 'Task',
+    assigneeId: o.assigneeId ?? null,
+    status: o.status ?? 'todo',
   });
 }
 
