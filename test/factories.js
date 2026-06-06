@@ -2,6 +2,7 @@ import { models } from '../src/db/index.js';
 
 const {
   Tenant, OrgUnit, Role, User, UserRole, UserOrgUnit, Grant, UserGrant, Page, RolePageAccess,
+  Asset, WorkOrder,
 } = models;
 
 let counter = 0;
@@ -66,6 +67,28 @@ export function makePage(tenantId, o = {}) {
 
 export const setPageAccess = (roleId, pageId, enabled) =>
   RolePageAccess.create({ roleId, pageId, enabled });
+
+export function makeAsset(tenantId, o = {}) {
+  return Asset.create({
+    tenantId,
+    name: o.name ?? 'Asset',
+    orgUnitId: o.orgUnitId ?? null,
+    assignedToUserId: o.assignedToUserId ?? null,
+    value: o.value ?? 0,
+    status: o.status ?? 'active',
+  });
+}
+
+export function makeWorkOrder(tenantId, o = {}) {
+  return WorkOrder.create({
+    tenantId,
+    assetId: o.assetId,
+    requestedById: o.requestedById,
+    assignedToUserId: o.assignedToUserId ?? null,
+    cost: o.cost ?? 0,
+    status: o.status ?? 'requested',
+  });
+}
 
 // FK constraints are ON DELETE CASCADE from Tenant down, so removing the tenant
 // removes users, roles, org units, grants, pages, audit logs, etc.
