@@ -1,3 +1,14 @@
-export const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-me';
-export const JWT_TTL = process.env.JWT_TTL || '1h';
-export const PORT = Number(process.env.PORT) || 3000;
+import 'dotenv/config';
+
+function required(name) {
+  const value = process.env[name];
+  if (!value) throw new Error(`Missing required env var: ${name}`);
+  return value;
+}
+
+export const config = {
+  databaseUrl: required('DATABASE_URL'),
+  jwtSecret: required('JWT_SECRET'),
+  jwtExpiresIn: process.env.JWT_EXPIRES_IN || '2h',
+  port: Number(process.env.PORT || 3000),
+};

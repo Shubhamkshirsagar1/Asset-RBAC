@@ -34,12 +34,16 @@ Adding a brand-new resource type (e.g. `Prescription`, `Invoice`) is a configura
   We build the evaluator ourselves. (CASL may be used on the React side for cosmetic UI gating
   only; server-side is the source of truth.)
 - **Multi-tenancy:** shared database, shared schema, **row-level isolation** via a `tenantId`
-  column on all tenant-scoped tables. A Prisma middleware auto-injects `where: { tenantId }` so
-  isolation is enforced in one place. A **platform scope** sits above tenants
-  (`PLATFORM_SUPERADMIN` can create tenants and cross boundaries).
+  column on all tenant-scoped tables. Global **Sequelize hooks** (`beforeFind`/`beforeCreate`/
+  `beforeBulkCreate`/`beforeUpdate`/`beforeBulkUpdate`/`beforeDestroy`/`beforeBulkDestroy`/
+  `beforeCount`) read the current tenant from an `AsyncLocalStorage` context and auto-inject
+  `where: { tenantId }` / stamp `tenantId` on writes, so isolation is enforced in one place. A
+  **platform scope** sits above tenants (`PLATFORM_SUPERADMIN` can create tenants and cross
+  boundaries) by running queries outside the tenant context.
 - **Backend layering:** `routes` (paths + guards) → `controllers` (thin req/res ↔ service) →
   `services` (business logic, no Express) → `engine` (pure, unit-testable authorization core).
-- **ORM:** Prisma. **DB:** PostgreSQL via Docker Compose (one-command local setup).
+- **ORM:** Sequelize (with `pg`). **Migrations:** Umzug (ESM-friendly, programmatic).
+  **DB:** PostgreSQL via Docker Compose (one-command local setup).
 
 ## 4. Project structure
 
@@ -48,16 +52,15 @@ RBAC/
   docker-compose.yml            # local Postgres (+ optional pgAdmin)
   docs/superpowers/specs/       # this spec
   server/
-    prisma/
-      schema.prisma             # real Postgres schema
-      seed.js                   # seeds 2 tenants: Hospital + PM
+    migrations/                 # Umzug migration files (versioned schema)
     src/
       routes/                   # HTTP surface only — path -> controller, attach guards
       controllers/              # parse req/res, call services, shape responses
       services/                 # business logic (auth, rbac, tenancy, domain)
       engine/                   # the ABAC/RBAC authorization engine (pure)
       middleware/               # auth, tenant-context, authorize, error
-      db/                       # prisma client + tenant-scoped extension
+      db/                       # sequelize instance, models, tenant-scoping hooks, migrate runner
+      seed.js                   # seeds 2 tenants: Hospital + PM
       config.js
       app.js / index.js
     test/                       # engine unit tests + end-to-end API tests
@@ -158,8 +161,8 @@ Lightweight styling, no heavy design system. Server stays the source of truth; U
 
 ## 9. Local Postgres & testing
 
-- **`docker-compose.yml`** spins up Postgres locally in one command. Prisma handles
-  schema/migrations/seed.
+- **`docker-compose.yml`** spins up Postgres locally in one command. Sequelize defines the
+  models; Umzug runs versioned migrations; `src/seed.js` seeds the data.
 - **Seed** creates both tenants with realistic roles, users, org trees, grants, and sample records
   demonstrating every condition type.
 - **Tests:**
@@ -195,7 +198,7 @@ Lightweight styling, no heavy design system. Server stays the source of truth; U
 
 The system is built in phases, each independently verifiable:
 
-1. **Foundation** — Docker Postgres, Prisma schema, tenant middleware, auth, project restructure.
+1. **Foundation** — Docker Postgres, Sequelize models + Umzug migration, tenant-scoping hooks, auth, project restructure.
 2. **Engine** — pure `can()` evaluator + operator library + unit tests.
 3. **Core RBAC services & admin APIs** — roles, grants, pages, user grants, explain endpoint.
 4. **Hospital domain** — assets, work-orders, workflows + e2e tests.

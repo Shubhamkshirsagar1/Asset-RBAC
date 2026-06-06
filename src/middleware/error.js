@@ -1,5 +1,6 @@
-// Final error handler. Keep it last in the middleware chain.
+// Central error handler. Known errors carry a numeric `status`.
 export function errorHandler(err, req, res, _next) {
-  console.error(err);
-  res.status(err.status || 500).json({ error: err.message || 'internal error' });
+  const status = err.status || 500;
+  if (status >= 500) console.error(err);
+  res.status(status).json({ error: err.message || 'Internal Server Error' });
 }
